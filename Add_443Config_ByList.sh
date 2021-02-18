@@ -15,6 +15,10 @@ cd "$parent_path"
 
 source $config_name
 
+if [ ! -d "$ssl_dir" ]; then
+  mkdir $ssl_dir
+fi
+
 #使用者問答輸入
 read -p '請輸入後端主機IP: ' server_ip
 
@@ -25,13 +29,29 @@ echo "--------------------------------------"
 #讀取清單加入Nginx設定檔目錄
 while IFS="" read -r server_name || [ -n "$server_name" ]
 do
+  server_name_ssl=${server_name#*.}
   echo "- 設定 ${nginx_conf_dir}/${server_name}.conf"
+  if [ ! -f "${ssl_dir}/${server_name_ssl}.crt" ] || [ ! -f "${ssl_dir}/${server_name_ssl}.key" ]; then
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -subj /CN=*.${server_name_ssl} -keyout ${ssl_dir}/${server_name_ssl}.key -out ${ssl_dir}/${server_name_ssl}.crt
+  fi
   cat << EOF > ${nginx_conf_dir}/${server_name}.conf
-#-----------------------------------------------------------
 ##Port 80
 server {
-    listen  80;
-    server_name  $server_name;
+    listen 80;
+    server_name $server_name;
+
+    if (\$http_x_forwarded_proto != 'https') {
+       return 301 https://\$host\$request_uri;
+    }
+}
+#-----------------------------------------------------------
+##Port 443
+server {
+    listen 443;
+    server_name $server_name;
+    ssl on;
+    ssl_certificate ${ssl_dir}/${server_name_ssl}.crt;
+    ssl_certificate_key ${ssl_dir}/${server_name_ssl}.key;
     location / {
         proxy_set_header Host $server_name;
         proxy_set_header remote_addr \$remote_addr;

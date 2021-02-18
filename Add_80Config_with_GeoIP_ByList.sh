@@ -33,6 +33,9 @@ server {
     listen  80;
     server_name  $server_name;
     location / {
+	if (\$allowed_country = no) {
+	return 403;
+	}
         proxy_set_header Host $server_name;
         proxy_set_header remote_addr \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
